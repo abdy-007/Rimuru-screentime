@@ -5,13 +5,13 @@ All notable changes to this plugin. Versions follow `manifest.json`; each is a t
 ## [0.7.4] - 2026-10-28
 
 ### Added
-- Focused Chromium tab time under each browser's app total. Hover a browser in the popup to see its tab breakdown. Brave, Chromium, Chrome, Vivaldi and Edge use the focused window title immediately; the optional Chromium companion extension and local native host distinguish tabs that share a title.
-- Daily tab limits through the existing limit setting (`tab:<title>` or an exact session tab ID). They use the existing one-per-day notification and urgent bar colour.
+- Focused Chromium site time under each browser's app total. Hover a browser in the popup to see domains such as `youtube.com`. The optional Chromium companion extension supplies the hostname; page titles are not stored.
+- Daily site limits through the existing limit setting (`tab:youtube.com`). They use the existing one-per-day notification and urgent bar colour.
 - The first-run hint and install instructions explain optional browser extension tracking.
 
 ### Changed
-- Hovering a Chromium browser in the donut or app list now splits its slice into individual tabs. Hovering a tab row highlights the corresponding ring segment and shows its time in the center; leaving the chart returns to the app view.
-- Recent history stores tab detail alongside apps and projects. Older history remains readable; browser time recorded before this version appears as unclassified in the breakdown.
+- Hovering a Chromium browser in the donut or app list now splits its slice into site domains. Hovering a site row highlights the corresponding ring segment and shows its time in the center; leaving the chart returns to the app view.
+- Recent history stores site detail alongside apps and projects. Older page-title detail is discarded on load; browser time without a known domain appears as unclassified when site detail is available.
 
 ### Fixed
 - The app legend rows no longer overlap when the stable hover target is active.

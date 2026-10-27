@@ -20,6 +20,6 @@ Omarchy plugins run inside the shell with your user's permissions and are not sa
 - writes its own history file there automatically and updates its own entry in `~/.config/omarchy/shell.json` when the user changes a setting;
 - never runs `sudo`, installs anything, or executes downloaded code.
 
-The optional Chromium companion is separate from the shell plugin. Its extension reads the active tab's title and browser tab ID, and sends those values through Chromium native messaging to `python/browser_tab_host.py`. It does not send URLs or page contents. The host writes a local `browser-tab.json` state file; when explicitly run with `--install`, it writes a user-level native messaging manifest for the selected browser. It never runs `sudo`.
+The optional Chromium companion is separate from the shell plugin. Its extension reads the active tab's URL hostname and hashes its title locally to match the focused window. It sends only that hostname and hash through Chromium native messaging to `python/browser_tab_host.py`. It does not send page titles, full URLs or page contents. The host writes a local `browser-tab.json` state file; when explicitly run with `--install`, it writes a user-level native messaging manifest for the selected browser. It never runs `sudo`.
 
 A picture the user chooses as a background is read from where it is and never copied or uploaded.

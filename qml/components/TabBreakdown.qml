@@ -22,7 +22,7 @@ Column {
     spacing: Style.space(3)
 
     SectionLabel {
-        text: root.browserName.toUpperCase() + " TABS"
+        text: root.browserName.toUpperCase() + " SITES"
     }
     Flickable {
         width: parent.width
@@ -91,7 +91,7 @@ Column {
     }
     Text {
         textFormat: Text.PlainText
-        text: "Pick a tab limit in Settings, or enter tab:<title>."
+        text: "Set a site limit in Settings with tab:youtube.com."
         color: root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption

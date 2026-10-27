@@ -35,20 +35,21 @@ class BrowserTabHostTests(unittest.TestCase):
     def test_framed_active_tab_is_saved_locally(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "browser-tab.json"
-            host.run_host(path, io.BytesIO(frame({"active": True, "id": "session:42", "title": "Docs"})))
+            host.run_host(path, io.BytesIO(frame({"active": True, "host": "github.com", "titleKey": "title:abc:123"})))
             state = json.loads(path.read_text())
-            self.assertEqual(state["id"], "session:42")
-            self.assertEqual(state["title"], "Docs")
+            self.assertEqual(state["host"], "github.com")
+            self.assertEqual(state["titleKey"], "title:abc:123")
+            self.assertNotIn("title", state)
             self.assertTrue(state["active"])
             self.assertIsInstance(state["at"], int)
 
-    def test_invalid_id_does_not_replace_last_good_state(self):
+    def test_invalid_host_does_not_replace_last_good_state(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "browser-tab.json"
-            stream = io.BytesIO(frame({"active": True, "id": "session:42", "title": "Docs"}) +
-                                frame({"active": True, "id": "../../bad", "title": "Bad"}))
+            stream = io.BytesIO(frame({"active": True, "host": "github.com", "titleKey": "title:abc:123"}) +
+                                frame({"active": True, "host": "../../bad", "titleKey": "title:abc:123"}))
             host.run_host(path, stream)
-            self.assertEqual(json.loads(path.read_text())["title"], "Docs")
+            self.assertEqual(json.loads(path.read_text())["host"], "github.com")
 
     def test_inactive_message_clears_tab(self):
         with tempfile.TemporaryDirectory() as directory:

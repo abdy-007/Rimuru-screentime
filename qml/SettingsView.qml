@@ -52,7 +52,7 @@ Item {
         if (k.slice(0, 4) === "tab:") {
             for (var i = 0; i < todayTabs.length; i++)
                 if (todayTabs[i].id.toLowerCase() === k.slice(4)) {
-                    label = "Tab: " + todayTabs[i].title;
+                    label = "Site: " + todayTabs[i].title;
                     break;
                 }
         }
@@ -702,7 +702,7 @@ Item {
                 textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.WordWrap
-                text: "Pick a tab seen today for its own limit during this browser session, or enter tab:<title> to share a limit across tabs with that title. Limits send a reminder when reached."
+                text: "Pick a site seen today or enter tab:youtube.com to set a daily limit for that domain. Limits send a reminder when reached."
                 color: root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
@@ -752,7 +752,7 @@ Item {
                             required property var modelData
                             foreground: root.foreground
                             fontFamily: root.fontFamily
-                            text: modelData.browser + ": " + modelData.title.slice(0, 24) + (modelData.title.length > 24 ? "…" : "") + (modelData.id.slice(0, 6) === "title:" ? "" : " #" + modelData.id.split(":").pop())
+                            text: modelData.browser + ": " + modelData.title.slice(0, 32) + (modelData.title.length > 32 ? "…" : "")
                             onClicked: root.chooseTab(modelData.id)
                         }
                     }
@@ -765,7 +765,7 @@ Item {
                 TextBox {
                     id: limitApp
                     width: (parent.width - addLimit.width - parent.spacing * 2) * 0.55
-                    placeholder: "App or tab:<title>"
+                    placeholder: "App or tab:youtube.com"
                     foreground: root.foreground
                     fontFamily: root.fontFamily
                     onSubmitted: limitTime.focusInput()

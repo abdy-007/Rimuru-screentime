@@ -538,7 +538,7 @@ Item {
             visible: root.fresh
             width: parent.width
             textFormat: Text.PlainText
-            text: "Nothing tracked yet. Time is counted while a window has focus. Focused Chromium tabs are tracked too; the optional browser extension separates tabs with the same title."
+            text: "Nothing tracked yet. Time is counted while a window has focus. Add the optional browser extension to see time by site, such as youtube.com."
             wrapMode: Text.WordWrap
             color: root.dim
             font.family: root.fontFamily

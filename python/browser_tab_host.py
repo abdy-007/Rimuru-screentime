@@ -68,14 +68,19 @@ def run_host(state_path=STATE, source=None):
         if not isinstance(message, dict):
             continue
         active = message.get("active") is True
-        tab_id = message.get("id", "")
-        title = message.get("title", "")
-        if active and (not isinstance(tab_id, str) or not re.fullmatch(r"[a-zA-Z0-9:_-]{1,100}", tab_id)
-                       or not isinstance(title, str)):
-            continue
+        host = message.get("host", "")
+        title_key = message.get("titleKey", "")
+        if active:
+            if not isinstance(host, str) or len(host) > 253 or not re.fullmatch(r"[a-z0-9.-]+", host):
+                continue
+            if host.startswith("www.") or any(not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label)
+                                              for label in host.split(".")):
+                continue
+            if not isinstance(title_key, str) or not re.fullmatch(r"title:[0-9a-f]{1,8}:[0-9a-f]{1,8}", title_key):
+                continue
         state = {"active": active, "at": int(time.time() * 1000)}
         if active:
-            state.update({"id": tab_id, "title": title[:200]})
+            state.update({"host": host, "titleKey": title_key})
         state_path.parent.mkdir(parents=True, exist_ok=True)
         descriptor, temporary = tempfile.mkstemp(prefix=".browser-tab-", dir=state_path.parent)
         try:

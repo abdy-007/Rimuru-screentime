@@ -98,11 +98,13 @@ function parseHistory(text) {
           var sourceTab = sourceTabs[tabId]
           if (!sourceTab || !validMs(sourceTab.ms) || !sourceTab.ms || left <= 0) continue
           var amount = Math.min(left, Math.round(sourceTab.ms))
-          var title = String(sourceTab.title || "").trim().slice(0, 200)
-          if (!/^[a-zA-Z0-9:_-]{1,100}$/.test(tabId) || !title) continue
+          var host = siteEntry(tabId, sourceTab)
+          // Older releases stored page titles and session IDs. Keep their app
+          // totals, but do not carry those titles into the new site history.
+          if (!host) continue
           d.tabs = d.tabs || {}
           d.tabs[browser] = d.tabs[browser] || {}
-          d.tabs[browser][tabId] = { ms: amount, title: title }
+          d.tabs[browser][tabId] = { ms: amount, host: host }
           left -= amount
         }
       }
@@ -140,7 +142,7 @@ function addTime(days, key, app, ms, project, tab) {
     if (tab) {
       var browserTabs = Object.assign({}, tabs[app])
       var oldTab = browserTabs[tab.id]
-      browserTabs[tab.id] = { ms: (oldTab ? oldTab.ms : 0) + ms, title: tab.title }
+      browserTabs[tab.id] = { ms: (oldTab ? oldTab.ms : 0) + ms, host: tab.host }
       tabs[app] = browserTabs
     }
     next[key].tabs = tabs
@@ -248,10 +250,8 @@ function isChromiumApp(app) {
   return !!CHROMIUM_APPS[canonicalApp(app)]
 }
 
-// A browser's focused window title usually contains the active tab's title.
-// Remove the browser suffix, when present, and retain a stable display key.
-// The compositor does not expose a tab ID or URL, so identical titles share a
-// bucket and changing titles start a new one.
+// Used only to match the extension's active tab to the focused window. Page
+// titles never become history labels; the extension supplies the hostname.
 function browserTabTitle(app, title) {
   if (!isChromiumApp(app)) return ""
   var name = String(title || "").replace(/[\u0000-\u001f\u007f]/g, " ").trim()
@@ -280,15 +280,30 @@ function titleTabId(title) {
   return "title:" + (first >>> 0).toString(16) + ":" + (second >>> 0).toString(16)
 }
 
+function siteHost(value) {
+  var host = String(value || "").toLowerCase().replace(/^www\./, "")
+  if (host.length > 253 || !/^[a-z0-9.-]+$/.test(host)) return ""
+  var labels = host.split(".")
+  for (var i = 0; i < labels.length; i++)
+    if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(labels[i])) return ""
+  return host
+}
+
+function siteEntry(tabId, entry) {
+  var host = entry && siteHost(entry.host)
+  return host && tabId === "site:" + host ? host : ""
+}
+
 function focusedBrowserTab(app, windowTitle, bridge, now) {
+  if (!isChromiumApp(app)) return null
   var title = browserTabTitle(app, windowTitle)
   if (!title) return null
+  var host = siteHost(bridge && bridge.host)
   if (bridge && bridge.active === true && typeof bridge.at === "number" &&
       now - bridge.at >= 0 && now - bridge.at < 5000 &&
-      typeof bridge.id === "string" && /^[a-zA-Z0-9:_-]{1,100}$/.test(bridge.id) &&
-      String(bridge.title || "").trim() === title)
-    return { id: bridge.id, title: title }
-  return { id: titleTabId(title), title: title }
+      host && bridge.titleKey === titleTabId(title))
+    return { id: "site:" + host, host: host }
+  return null
 }
 
 // Chromium "install as app" windows: chrome-<host>__<path>-<Profile>. The
@@ -343,7 +358,7 @@ function normalizeKeys(days) {
           var oldTab = day.tabs[normalized][tabId]
           day.tabs[normalized][tabId] = {
             ms: (oldTab ? oldTab.ms : 0) + sourceTab.ms,
-            title: sourceTab.title
+            host: sourceTab.host
           }
         }
       }
@@ -468,7 +483,7 @@ function takeBack(days, log, since) {
         var browserTabs = Object.assign({}, tabs[e.app])
         var oldTab = browserTabs[e.tab.id]
         var remaining = oldTab.ms - Math.min(cut, oldTab.ms)
-        if (remaining > 0) browserTabs[e.tab.id] = { ms: remaining, title: oldTab.title }
+        if (remaining > 0) browserTabs[e.tab.id] = { ms: remaining, host: oldTab.host }
         else delete browserTabs[e.tab.id]
         if (Object.keys(browserTabs).length) tabs[e.app] = browserTabs
         else delete tabs[e.app]
@@ -526,8 +541,8 @@ function visibleDay(day, list, names) {
   return out
 }
 
-// Tab titles for a visible browser row, including time that predates tracking
-// or whose focused window had no title. Browser aliases/custom names can merge.
+// Site hostnames for a visible browser row, including unclassified browser
+// time from before this version or while the extension is unavailable.
 function browserTabs(day, rowName, names) {
   if (!day || !day.apps) return []
   var merged = {}
@@ -545,22 +560,23 @@ function browserTabs(day, rowName, names) {
     var tabs = day.tabs && day.tabs[app] ? day.tabs[app] : {}
     for (var tabId in tabs) {
       var sourceTab = tabs[tabId]
-      var key = app + "|" + tabId
-      merged[key] = { id: tabId, title: sourceTab.title, ms: sourceTab.ms }
+      var host = siteEntry(tabId, sourceTab)
+      if (!host) continue
+      var previous = merged[tabId]
+      merged[tabId] = { id: tabId, title: host, ms: sourceTab.ms + (previous ? previous.ms : 0) }
       accounted += sourceTab.ms
     }
     unclassified += Math.max(0, day.apps[app] - accounted)
   }
-  if (!hasChromium) return []
+  if (!hasChromium || Object.keys(merged).length === 0) return []
   var rows = Object.keys(merged).map(function (key) { return merged[key] })
-  if (unclassified) rows.push({ title: "Unknown tab / earlier time", ms: unclassified, unknown: true })
+  if (unclassified) rows.push({ title: "Unclassified browser time", ms: unclassified, unknown: true })
   if (otherBrowser) rows.push({ title: "Other browser time", ms: otherBrowser, unknown: true })
   rows.sort(function (a, b) { return b.ms - a.ms || (a.title < b.title ? -1 : 1) })
   return rows
 }
 
-// Preserve the browser row's tab order in the ring. Each row gets its own
-// slice, including two open tabs that happen to have the same title.
+// Preserve the browser row's site order in the ring.
 function tabDonutSlices(rows) {
   var total = 0
   for (var i = 0; i < rows.length; i++) total += rows[i].ms
@@ -625,7 +641,8 @@ function tabChoices(day, names) {
     if (!day.apps[app]) continue
     for (var id in day.tabs[app]) {
       var tab = day.tabs[app][id]
-      rows.push({ id: id, title: tab.title, browser: displayLabel(app, names), ms: tab.ms })
+      var host = siteEntry(id, tab)
+      if (host) rows.push({ id: host, title: host, browser: displayLabel(app, names), ms: tab.ms })
     }
   }
   rows.sort(function (a, b) { return b.ms - a.ms || (a.title < b.title ? -1 : 1) })
@@ -737,9 +754,10 @@ function limitStatus(day, limits, names) {
         if (!apps[browser]) continue
         for (var tabId in day.tabs[browser]) {
           var tab = day.tabs[browser][tabId]
-          if (tab.title.toLowerCase() === target || tabId.toLowerCase() === target) {
+          var host = siteEntry(tabId, tab)
+          if (host && (host === target || tabId.toLowerCase() === target)) {
             used += tab.ms
-            bestTitle = tab.title
+            bestTitle = host
           }
         }
       }
@@ -753,7 +771,7 @@ function limitStatus(day, limits, names) {
     var limitMs = limits[name] * 60000
     out.push({
       name: name,
-      label: tabLimit ? "Tab: " + (bestTitle || target) : (best !== null ? displayLabel(best, names) : displayLabel(name, names)),
+      label: tabLimit ? "Site: " + (bestTitle || target) : (best !== null ? displayLabel(best, names) : displayLabel(name, names)),
       limitMs: limitMs,
       usedMs: used,
       leftMs: Math.max(0, limitMs - used),

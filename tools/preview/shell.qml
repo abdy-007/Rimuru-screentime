@@ -96,10 +96,9 @@ ShellRoot {
             };
             if (i === 0) {
                 var brave = apps["brave"] || 0;
-                var fallback = Model.focusedBrowserTab("brave", "Documentation - Brave", {}, Date.now());
                 var previewTabs = {};
-                previewTabs[fallback.id] = { title: fallback.title, ms: Math.floor(brave * 0.5) };
-                previewTabs["preview:2"] = { title: "Video tutorial", ms: Math.floor(brave * 0.3) };
+                previewTabs["site:github.com"] = { host: "github.com", ms: Math.floor(brave * 0.5) };
+                previewTabs["site:youtube.com"] = { host: "youtube.com", ms: Math.floor(brave * 0.3) };
                 days[Model.dayKey(d)].tabs = { brave: previewTabs };
             }
         }
