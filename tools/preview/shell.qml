@@ -94,6 +94,14 @@ ShellRoot {
                 apps: apps,
                 projects: { "website": Math.round(term * 0.55), "dotfiles": Math.round(term * 0.3), "notes-cli": Math.round(term * 0.15) }
             };
+            if (i === 0) {
+                var brave = apps["brave"] || 0;
+                var fallback = Model.focusedBrowserTab("brave", "Documentation - Brave", {}, Date.now());
+                var previewTabs = {};
+                previewTabs[fallback.id] = { title: fallback.title, ms: Math.floor(brave * 0.5) };
+                previewTabs["preview:2"] = { title: "Video tutorial", ms: Math.floor(brave * 0.3) };
+                days[Model.dayKey(d)].tabs = { brave: previewTabs };
+            }
         }
         // The real rollover, so the archive path is exercised too.
         return Model.rollArchive(days, {}, 365, today);
@@ -166,6 +174,8 @@ ShellRoot {
                 var s = shell.scenario;
                 if (s === "hover")
                     hoverIndex = 1;
+                else if (s === "tabs" || s === "tabhover")
+                    focusApp(2, "");
                 else if (s === "more")
                     showMore = true;
                 else if (s === "morehover") {
@@ -200,6 +210,14 @@ ShellRoot {
                 } else if (s === "oldest") {
                     pageBy(1000);
                     stepDay(-1);
+                }
+            }
+            Timer {
+                interval: 2500
+                running: shell.scenario === "tabs" || shell.scenario === "tabhover"
+                onTriggered: {
+                    dash.focusApp(2, "");
+                    if (shell.scenario === "tabhover") dash.hoverTab(1);
                 }
             }
         }

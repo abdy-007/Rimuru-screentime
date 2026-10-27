@@ -214,7 +214,8 @@ test("canonicalApp: Chromium web apps fold to their host across profiles", () =>
   assert.equal(M.canonicalApp("brave-app.slack.com"), "web:app.slack.com")
   // Plain browser classes are not web apps.
   assert.equal(M.canonicalApp("brave-browser"), "brave")
-  assert.equal(M.canonicalApp("chromium-browser"), "chromium-browser")
+  assert.equal(M.canonicalApp("chromium-browser"), "chromium")
+  assert.equal(M.canonicalApp("brave-browser-nightly"), "brave")
 })
 
 test("parseList accepts arrays and strings, lowercases and de-duplicates", () => {
@@ -535,12 +536,12 @@ test("parseHistory reads the archive, drops bad entries, and old files have none
   assert.equal(M.parseHistory('{"archive": null}').ok, false)
 })
 
-test("serialize writes version 2 with a sorted archive and round-trips", () => {
+test("serialize writes version 3 with a sorted archive and round-trips", () => {
   const days = M.addTime({}, "2026-09-20", "foot", 5000)
   const archive = { "2025-03-02": 200, "2024-12-31": 100 }
   const text = M.serialize(days, archive)
   const parsed = JSON.parse(text)
-  assert.equal(parsed.version, 2)
+  assert.equal(parsed.version, 3)
   deepEqual(Object.keys(parsed.archive), ["2024-12-31", "2025-03-02"])
   const back = M.parseHistory(text)
   deepEqual(back.days, days)
@@ -1032,6 +1033,95 @@ test("logRecent keeps different projects apart", () => {
   let log = M.logRecent([], "d", "nvim", 0, 1000, 60000, "a")
   log = M.logRecent(log, "d", "nvim", 1000, 2000, 60000, "b")
   assert.equal(log.length, 2)
+})
+
+test("Chromium tab detection prefers exact native IDs and falls back to window titles", () => {
+  const now = 20000
+  deepEqual(M.focusedBrowserTab("brave-browser", "Docs - Brave", {
+    active: true, at: 19000, id: "session-1:42", title: "Docs"
+  }, now), { id: "session-1:42", title: "Docs" })
+  deepEqual(M.focusedBrowserTab("brave", "Docs - Brave", {
+    active: true, at: 10000, id: "session-1:42", title: "Docs"
+  }, now), { id: M.titleTabId("Docs"), title: "Docs" })
+  deepEqual(M.focusedBrowserTab("chromium", "Docs - Chromium", {}, now), { id: M.titleTabId("Docs"), title: "Docs" })
+  assert.equal(M.titleTabId("Docs"), M.titleTabId("docs"))
+  assert.equal(M.focusedBrowserTab("firefox", "Docs - Mozilla Firefox", {}, now), null)
+  assert.equal(M.focusedBrowserTab("chrome-example.com", "Docs", {}, now), null)
+})
+
+test("exact tabs share browser totals but retain separate identities through history", () => {
+  const first = { id: "session:1", title: "Docs" }
+  const second = { id: "session:2", title: "Docs" }
+  const key = "2026-10-27"
+  let days = M.addTime({}, key, "brave", 90000, "", first)
+  days = M.addTime(days, key, "brave", 60000, "", second)
+  days = M.addTime(days, key, "brave", 30000, "", first)
+  assert.equal(days[key].total, 180000)
+  assert.equal(days[key].apps.brave, 180000)
+  deepEqual(M.browserTabs(days[key], "Brave", {}), [
+    { id: "session:1", title: "Docs", ms: 120000 },
+    { id: "session:2", title: "Docs", ms: 60000 }
+  ])
+  deepEqual(M.tabChoices(days[key], {}).map((r) => r.id), ["session:1", "session:2"])
+  deepEqual(M.parseHistory(M.serialize(days)).days, days)
+  assert.equal(M.limitStatus(days[key], { "tab:session:1": 2, "tab:docs": 4 }, {})[0].over, true)
+  deepEqual(M.limitStatus(days[key], { "tab:session:1": 2, "tab:docs": 4 }, {}).map((r) => r.usedMs), [120000, 180000])
+})
+
+test("tab donut slices map one-to-one to rows, including identical tab titles", () => {
+  const rows = [
+    { id: "session:1", title: "Docs", ms: 60000 },
+    { id: "session:2", title: "Docs", ms: 30000 },
+    { title: "Unknown tab / earlier time", ms: 10000, unknown: true }
+  ]
+  const slices = M.tabDonutSlices(rows)
+  deepEqual(slices.map((s) => s.id), ["session:1", "session:2", ""])
+  deepEqual(slices.map((s) => s.ms), [60000, 30000, 10000])
+  assert.equal(slices[0].share, 0.6)
+  assert.equal(slices[1].startFrac, 0.6)
+  assert.ok(Math.abs(slices[2].startFrac + slices[2].sweepFrac - 1) < 1e-12)
+  assert.equal(slices[2].unknown, true)
+  deepEqual(M.tabDonutSlices([]), [])
+})
+
+test("expanded donut splits only the browser arc and preserves the other app angles", () => {
+  const apps = M.donutSlices({ total: 100, apps: { codex: 50, brave: 30, terminal: 20 } }, {}, 6, 0)
+  const expanded = M.expandedDonutSlices(apps, 1, [
+    { id: "tab:1", title: "Docs", ms: 20 },
+    { id: "tab:2", title: "Video", ms: 10 }
+  ])
+  deepEqual(expanded.map((s) => s.kind), ["app", "tab", "tab", "app"])
+  assert.equal(expanded[0].startFrac, apps[0].startFrac)
+  assert.equal(expanded[0].sweepFrac, apps[0].sweepFrac)
+  assert.equal(expanded[1].startFrac, apps[1].startFrac)
+  assert.equal(expanded[1].sweepFrac, 0.2)
+  assert.equal(expanded[2].sweepFrac, 0.1)
+  assert.equal(expanded[3].startFrac, apps[2].startFrac)
+  assert.equal(expanded[3].sweepFrac, apps[2].sweepFrac)
+  deepEqual(M.expandedDonutSlices(apps, -1, []).map((s) => s.kind), ["app", "app", "app"])
+})
+
+test("idle rollback, ignored browsers, and older history keep tab detail consistent", () => {
+  const tab = { id: "session:1", title: "Video" }
+  const days = M.addTime({}, "d", "brave", 120000, "", tab)
+  const log = M.logRecent([], "d", "brave", 0, 120000, 300000, "", tab)
+  const rolled = M.takeBack(days, log, 60000)
+  assert.equal(rolled.d.tabs.brave[tab.id].ms, 60000)
+  assert.equal(rolled.d.apps.brave, 60000)
+  deepEqual(M.visibleDay(days.d, ["brave"], {}), { total: 0, apps: {} })
+  const old = { total: 120000, apps: { brave: 120000 } }
+  deepEqual(M.browserTabs(old, "Brave", {}), [{ title: "Unknown tab / earlier time", ms: 120000, unknown: true }])
+  const mixed = { total: 180000, apps: { brave: 120000, firefox: 60000 }, tabs: { brave: { x: { ms: 120000, title: "Docs" } } } }
+  deepEqual(M.browserTabs(mixed, "Browser", { brave: "Browser", firefox: "Browser" }), [
+    { id: "x", title: "Docs", ms: 120000 },
+    { title: "Other browser time", ms: 60000, unknown: true }
+  ])
+  deepEqual(M.browserTabs({ total: 60000, apps: { firefox: 60000 } }, "Firefox", {}), [])
+  const parsed = M.parseHistory(JSON.stringify({ days: { d: { apps: { brave: 5000 }, tabs: { brave: { x: { ms: 9000, title: "Too much" } } } } } }))
+  // Bad day keys are dropped, and tab time is capped at the app total.
+  deepEqual(parsed.days, {})
+  const valid = M.parseHistory(JSON.stringify({ days: { "2026-10-27": { apps: { brave: 5000 }, tabs: { brave: { x: { ms: 9000, title: "Too much" } } } } } }))
+  assert.equal(valid.days["2026-10-27"].tabs.brave.x.ms, 5000)
 })
 
 test("topProjects lists projects with at least a minute, most first", () => {
